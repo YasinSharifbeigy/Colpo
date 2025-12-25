@@ -1,0 +1,5 @@
+defaults:
+  - dataset: default
+  - model: resnet
+  - training: default
+  - _self_
