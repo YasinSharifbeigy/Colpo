@@ -7,14 +7,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.append(str(PROJECT_ROOT))
 
 import itertools
-from omegaconf.dictconfig import DictConfig
+from omegaconf import DictConfig, ListConfig
 from collections import defaultdict
-
+import importlib
+from omegaconf import DictConfig, OmegaConf, ListConfig
+from typing import Any
 # ============================================================
 # 1) Transform Registry
 # ============================================================
 
-class TransformRegistry:
+class TransformRegistry_old:
     """
     Registry with built-in base transforms.
     """
@@ -94,10 +96,10 @@ class TransformRegistry:
 
 
 
-class AugmentationPipeline():
-    def __init__(self, cfg: DictConfig|dict|None, transform_registry: TransformRegistry|None = None ):
+class AugmentationPipeline_old():
+    def __init__(self, cfg: DictConfig|dict|None, transform_registry: TransformRegistry_old|None = None ):
         self.cfg = cfg
-        self.transform_registry = transform_registry if transform_registry is not None else TransformRegistry()
+        self.transform_registry = transform_registry if transform_registry is not None else TransformRegistry_old()
         self.num_random_augmentations = 0
         self.num_ecplicit_augmentations = 0
         self.explicit_grid = self.build_explicit_grid()
@@ -211,117 +213,134 @@ class AugmentationPipeline():
         return img
 
 
-# ============================================================
-# 2) Explicit grid builder
-# ============================================================
-
-def build_explicit_grid(transform_cfg):
+def import_target(path: str):
     """
-    Builds grid ONLY over explicit arguments.
-
-    transform_cfg:
-        arg_name -> {type, args}
+    Import class from dotted path.
     """
-    explicit_args = {
-        name: spec["args"]
-        for name, spec in transform_cfg.items()
-        if spec["type"] == "explicit"
-    }
-
-    if not explicit_args:
-        return [dict()]  # important: length=1 grid
-
-    keys = list(explicit_args.keys())
-    values = [explicit_args[k] for k in keys]
-
-    return [
-        dict(zip(keys, combo))
-        for combo in itertools.product(*values)
-    ]
+    module_path, cls_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, cls_name)
 
 
-# ============================================================
-# 3) Argument resolver (YOUR exact semantics)
-# ============================================================
+class AugmentationPipeline:
+    def __init__(self, cfg: DictConfig | dict | None):
+        self.cfg = cfg
+        self.steps = self._normalize_cfg(cfg)
+        self._steps = []
 
-def resolve_args(transform_cfg, explicit_grid, idx):
-    """
-    For a given idx:
-      - explicit args → choose value from grid
-      - random args → pass args AS-IS to transform
-    """
-    resolved = {}
+        for step in self.steps:
+            cls = import_target(step["_target_"])
+            self._steps.append({
+                "cls": cls,
+                "cfg": step,
+            })
 
-    # idx may be None (e.g. validation)
-    if idx is None:
-        grid_idx = 0
-    else:
-        grid_idx = idx % len(explicit_grid)
+        self.num_random_augmentations = 0
+        self.num_explicit_augmentations = 0
 
-    explicit_vals = explicit_grid[grid_idx]
+        self.explicit_grid = self._build_explicit_grid()
 
-    for arg_name, spec in transform_cfg.items():
-        arg_type = spec["type"]
+    # --------------------------------------------------
+    # Config normalization
+    # --------------------------------------------------
 
-        if arg_type == "explicit":
-            resolved[arg_name] = explicit_vals[arg_name]
+    def _normalize_cfg(self, cfg: Any) -> list:
+        """
+        Normalize a config object to a Python list.
+        
+        Supports:
+        - None -> returns empty list
+        - Python list or tuple -> returns as list
+        - OmegaConf ListConfig -> converts to Python list
+        - OmegaConf DictConfig -> wraps single dict in a list
+        """
+        if cfg is None:
+            return []
 
-        elif arg_type == "random":
-            resolved[arg_name] = spec["args"]
+        # Convert OmegaConf objects to Python native types
+        if isinstance(cfg, (DictConfig, ListConfig)):
+            cfg = OmegaConf.to_container(cfg, resolve=True)
 
-        else:
-            raise ValueError(
-                f"Unknown arg type '{arg_type}' for argument '{arg_name}'"
-            )
+        # If it's now a list or tuple, return as list
+        if isinstance(cfg, (list, tuple)):
+            return list(cfg)
 
-    return resolved
+        # If it's a single dict, wrap it in a list
+        if isinstance(cfg, dict):
+            return list(cfg)
 
+        raise TypeError(f"Unsupported type for config: {type(cfg)}")
+    # --------------------------------------------------
+    # Explicit grid (argument-level, EXACT semantics)
+    # --------------------------------------------------
 
-# ============================================================
-# 4) Pipeline builder
-# ============================================================
+    def _build_explicit_grid(self):
+        explicit_args = {}
 
-def build_pipeline(cfg, transform_registry):
-    """
-    Builds ordered augmentation pipeline.
+        self.num_explicit_augmentations = 0
+        self.num_random_augmentations = 0
 
-    cfg.augmentations:
-        transform_name -> transform_cfg
-    """
-    pipeline = []
+        for i, step in enumerate(self.steps):
+            for arg_name, spec in step.items():
+                if arg_name == "_target_":
+                    continue
 
-    if not hasattr(cfg, "augmentations"):
-        return pipeline
+                if spec["type"] == "explicit":
+                    explicit_args[(i, arg_name)] = spec["args"]
+                    self.num_explicit_augmentations += 1
+                elif spec["type"] == "random":
+                    self.num_random_augmentations += 1
 
-    for transform_name, transform_cfg in cfg.augmentations.items():
-        if transform_name not in transform_registry:
-            raise KeyError(
-                f"Transform '{transform_name}' not registered. "
-                f"Available: {list(transform_registry._registry.keys())}"
-            )
+        if not explicit_args:
+            return [dict()]  # important
 
-        transform_fn = transform_registry.get(transform_name)
-        explicit_grid = build_explicit_grid(transform_cfg)
+        keys = list(explicit_args.keys())
+        values = [explicit_args[k] for k in keys]
 
-        pipeline.append({
-            "name": transform_name,
-            "fn": transform_fn,
-            "cfg": transform_cfg,
-            "grid": explicit_grid,
-        })
+        grid = []
+        for combo in itertools.product(*values):
+            sample = defaultdict(dict)
+            for (step_i, arg_name), value in zip(keys, combo):
+                sample[step_i][arg_name] = value
+            grid.append(dict(sample))
 
-    return pipeline
+        return grid
 
+    # --------------------------------------------------
+    # Argument resolution
+    # --------------------------------------------------
 
-# ============================================================
-# 5) Apply pipeline
-# ============================================================
+    def _resolve_args(self, step_i, step_cfg, idx):
+        resolved = {}
 
-def apply_pipeline(img, pipeline, idx=None):
-    """
-    Applies transforms in order.
-    """
-    for step in pipeline:
-        kwargs = resolve_args(step["cfg"], step["grid"], idx)
-        img = step["fn"](img, **kwargs)
-    return img
+        grid_idx = 0 if idx is None else idx % len(self.explicit_grid)
+
+        for arg_name, spec in step_cfg.items():
+            if arg_name == "_target_":
+                continue
+
+            t = spec["type"]
+
+            if t == "explicit":
+                resolved[arg_name] = self.explicit_grid[grid_idx][step_i][arg_name]
+            elif t in ("random", "simple"):
+                resolved[arg_name] = spec["args"]
+            else:
+                raise ValueError(f"Unknown arg type '{t}'")
+
+        return resolved
+
+    # --------------------------------------------------
+    # Call
+    # --------------------------------------------------
+
+    def __call__(self, img, idx=None):
+        for i, step in enumerate(self._steps):
+            cls = step["cls"]
+            cfg = step["cfg"]
+
+            kwargs = self._resolve_args(i, cfg, idx)
+            transform = cls(**kwargs)
+            img = transform(img)
+
+        return img

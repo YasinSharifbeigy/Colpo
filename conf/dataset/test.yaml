@@ -1,0 +1,53 @@
+
+dataset:
+  name: main_cached
+  
+  image_root: D:\Data\Cropped Folder
+  aug_mode: fully_cached        # none | fully_cached
+  label_col: Abnormality(Impression)
+  
+  include_original: true          # include base-only image
+  num_random_augs: 3              # only used for random_online / index_dependent
+
+  # ----------------------------
+  # Base pipeline (ALWAYS applied)
+  # ----------------------------
+  base_pipeline:
+    # crop_to_square: {}
+
+    - _target_: torchvision.transforms.Resize
+      size:
+        type: simple
+        args: 224
+
+    - _target_: torchvision.transforms.ToTensor
+
+    # - _target_: torchvision.transforms.Normalize
+    #   mean:
+    #     type: simple
+    #     args: [0.485, 0.456, 0.406]
+    #   std:
+    #     type: simple
+    #     args: [0.229, 0.224, 0.225]
+
+  
+  augmentations:
+
+    - _target_: torchvision.transforms.RandomRotation
+      degrees:
+        type: random
+        args: 30   # you can replace with a tuple like [-30,30] if you want both directions
+
+    - _target_: torchvision.transforms.RandomHorizontalFlip
+      p:
+        type: explicit
+        args: [0.0, 1.0]
+
+    - _target_: torchvision.transforms.RandomVerticalFlip
+      p:
+        type: explicit
+        args: [0.0, 1.0]
+
+    
+
+
