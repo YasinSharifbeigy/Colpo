@@ -1,6 +1,6 @@
 
 dataset:
-  name: main_cached
+  name: MainDataset_Cached
   
   image_root: D:\Data\Cropped Folder
   aug_mode: fully_cached        # none | fully_cached
@@ -16,37 +16,43 @@ dataset:
     # crop_to_square: {}
 
     - _target_: torchvision.transforms.Resize
-      size:
-        type: simple
-        args: 224
+      args:
+        size:
+          type: simple
+          value: 224
 
     - _target_: torchvision.transforms.ToTensor
+      args: {}
 
-    # - _target_: torchvision.transforms.Normalize
-    #   mean:
-    #     type: simple
-    #     args: [0.485, 0.456, 0.406]
-    #   std:
-    #     type: simple
-    #     args: [0.229, 0.224, 0.225]
+    - _target_: torchvision.transforms.Normalize
+      args:
+        mean:
+          type: simple
+          value: [0.485, 0.456, 0.406]
+        std:
+          type: simple
+          value: [0.229, 0.224, 0.225]
 
   
-  augmentations:
+  augmentation_pipeline:
 
     - _target_: torchvision.transforms.RandomRotation
-      degrees:
-        type: random
-        args: 30   # you can replace with a tuple like [-30,30] if you want both directions
+      args:
+        degrees:
+          type: random
+          value: 30   # you can replace with a tuple like [-30,30] if you want both directions
 
     - _target_: torchvision.transforms.RandomHorizontalFlip
-      p:
-        type: explicit
-        args: [0.0, 1.0]
+      args:
+        p:
+          type: explicit
+          value: [0.0, 1.0]
 
     - _target_: torchvision.transforms.RandomVerticalFlip
-      p:
-        type: explicit
-        args: [0.0, 1.0]
+      args:
+        p:
+          type: explicit
+          value: [0.0, 1.0]
 
     
 

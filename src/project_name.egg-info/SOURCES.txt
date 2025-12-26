@@ -1,0 +1,12 @@
+pyproject.toml
+src/Colpo/dataset/base.py
+src/Colpo/dataset/basic_transforms.py
+src/Colpo/dataset/build.py
+src/Colpo/dataset/kaggle_dataset.py
+src/Colpo/dataset/main_dataset.py
+src/Colpo/dataset/merge.py
+src/Colpo/dataset/transforms.py
+src/project_name.egg-info/PKG-INFO
+src/project_name.egg-info/SOURCES.txt
+src/project_name.egg-info/dependency_links.txt
+src/project_name.egg-info/top_level.txt
