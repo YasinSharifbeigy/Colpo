@@ -3,6 +3,8 @@ from typing import Tuple, Union
 import torch
 from torch.utils.data import Dataset
 import importlib
+import inspect
+
 
 Sample = Union[
     Tuple[torch.Tensor, int],
@@ -10,15 +12,52 @@ Sample = Union[
 ]
 
 
-def import_target(path: str):
+def import_target(name: str):
     """
-    Import class from dotted path.
+    Import class from dotted path or current globals.
     """
-    module_path, cls_name = path.rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    return getattr(module, cls_name)
+    # --------------------------------------------------
+    # 1) Already in globals (Jupyter / same file)
+    # --------------------------------------------------
+    if name in globals():
+        obj = globals()[name]
+        if inspect.isclass(obj):
+            return obj
+
+    # --------------------------------------------------
+    # 2) Explicit dotted path
+    # --------------------------------------------------
+    if "." in name:
+        try:
+            module_path, cls_name = name.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            return getattr(module, cls_name)
+        except Exception as e:
+            raise ImportError(
+                f"Failed to import '{name}' as dotted path"
+            ) from e
+
+    # --------------------------------------------------
+    # 3) Nothing worked → FAIL LOUDLY
+    # --------------------------------------------------
+    raise ImportError(
+        f"import_target could not resolve '{name}'. "
+        f"Expected a dotted path or a global class."
+    )
+
 
 class BaseDataset(Dataset):
+
+    @classmethod
+    def build(cls, cfg: dict, **extra):
+        """
+        Build dataset from config.
+
+        Default behavior: pass cfg as kwargs.
+        Subclasses may override.
+        """
+        return cls(**cfg, **extra)
+    
     def has_extra_features(self) -> bool:
         return False
 

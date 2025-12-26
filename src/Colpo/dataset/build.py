@@ -9,69 +9,60 @@ import importlib
 from omegaconf import DictConfig, OmegaConf
 import torch
 
-from . import TransformPipeline
-from . import import_target
+import importlib
+import inspect
+from .transforms import TransformPipeline
+from .base import import_target
+from .main_dataset import MainDataset_Cached
+from .preprocess import prepare_dataframe
 
-def build_dataset(cfg: DictConfig | dict):
+
+import importlib
+
+def resolve_dataset_class(name: str):
     """
-    Build dataset instance from config.
+    Resolve dataset class from:
+    1) current namespace or dotted path
+    2) src.datasets.<name>
     """
 
-    if isinstance(cfg, DictConfig):
-        cfg = OmegaConf.to_container(cfg, resolve=True)
-
-    if "dataset" not in cfg:
-        raise ValueError("Config must contain 'dataset' section")
-
-    ds_cfg = cfg["dataset"]
+    # --------------------------------------------------
+    # 1) Try as-is
+    # --------------------------------------------------
+    try:
+        return import_target(name)
+    except ImportError:
+        pass
 
     # --------------------------------------------------
-    # Dataset class
+    # 2) Fallback to src.datasets.<name>
     # --------------------------------------------------
-    if "name" not in ds_cfg:
-        raise ValueError("dataset.name must be specified")
+    try:
+        return import_target(f"Colpo.dataset.{name}")
+    except ImportError as e:
+        raise ImportError(
+            f"Could not resolve dataset '{name}'.\n"
+            f"Tried:\n"
+            f"  - {name}\n"
+            f"  - Colpo.dataset.{name}"
+        ) from e
 
-    dataset_cls = import_target(
-        f"src.datasets.{ds_cfg['name']}"
-    )
 
-    # --------------------------------------------------
-    # Pipelines
-    # --------------------------------------------------
-    base_pipeline_cfg = ds_cfg.pop("base_pipeline", None)
-    aug_pipeline_cfg = ds_cfg.pop("augmentation_pipeline", None)
 
-    base_pipeline = (
-        TransformPipeline(base_pipeline_cfg)
-        if base_pipeline_cfg is not None
-        else None
-    )
+def build_dataset(cfg, **args):
+    
+    ds_cfg = dict(cfg["dataset"])  # copy
+    name = ds_cfg.pop("name")
 
-    aug_pipeline = (
-        TransformPipeline(aug_pipeline_cfg)
-        if aug_pipeline_cfg is not None
-        else None
-    )
+    dataset_cls = resolve_dataset_class(name)
 
-    # --------------------------------------------------
-    # Remaining dataset args
-    # --------------------------------------------------
-    ds_kwargs = {
-        k: v
-        for k, v in ds_cfg.items()
-        if k != "name"
-    }
+    # If dataset provides its own build logic, use it
+    if hasattr(dataset_cls, "build") and callable(dataset_cls.build):
+        return dataset_cls.build(ds_cfg, **args)
 
-    # Inject pipelines
-    ds_kwargs["base_pipeline"] = base_pipeline
-    ds_kwargs["aug_pipeline"] = aug_pipeline
+    # Fallback: direct constructor
+    return dataset_cls(**ds_cfg, **args)
 
-    # --------------------------------------------------
-    # Instantiate dataset
-    # --------------------------------------------------
-    dataset = dataset_cls(**ds_kwargs)
-
-    return dataset
 
 
 def save_indices(indices, path):
