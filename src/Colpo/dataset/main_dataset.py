@@ -191,8 +191,8 @@ class MainDataset_Cached(BaseDataset):
 
     def _pack(self, img, i):
         if self.use_extra:
-            return img, self.extras[i], self.labels[i]
-        return img, self.labels[i]
+            return {'image': img, 'extra': self.extras[i], 'label': self.labels[i]}
+        return {'image': img, 'label': self.labels[i]}
 
     # --------------------------------------------------
     # PyTorch API
