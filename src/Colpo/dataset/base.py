@@ -49,14 +49,21 @@ def import_target(name: str):
 class BaseDataset(Dataset):
 
     @classmethod
-    def build(cls, cfg: dict, **extra):
+    def requires_preprocess(cls) -> bool:
+        return False
+
+    def preprocess(cls, dataset_cfg, preprocessor, **args) -> dict:
+        return {}
+
+    @classmethod
+    def build(cls, cfg: dict, **args):
         """
         Build dataset from config.
 
         Default behavior: pass cfg as kwargs.
         Subclasses may override.
         """
-        return cls(**cfg, **extra)
+        return cls(**cfg, **args)
     
     def has_extra_features(self) -> bool:
         return False

@@ -4,18 +4,39 @@ from PIL import Image
 from .base import BaseDataset
 from pandas.core.frame import DataFrame
 import os
-
+import pandas as pd
+import numpy as np
 from .transforms import TransformPipeline
-
+from .preprocess import PreprocessDataframe
 
 class MainDataset_Cached(BaseDataset):
-    
+
     @classmethod
-    def build(cls, cfg: dict, **extra_kwargs):
+    def requires_preprocess(cls, **args) -> bool:
+        return True
+
+    @classmethod
+    def preprocess(cls, dataset_cfg, preprocessor: PreprocessDataframe, **args):
+        if "Data_info" in args:
+            return {}
+
+        preprocess_inputs = dataset_cfg.pop("preprocess_inputs", None)
+        if preprocess_inputs is None:
+            raise ValueError("Missing preprocess_inputs")
+
+        main_df = pd.read_excel(preprocess_inputs["main_dataframe"], dtype=str)
+        hpv_df = pd.read_excel(preprocess_inputs["hpv_dataframe"])
+
+        Data_info = preprocessor.transform(main_df, hpv_df)
+
+        # DATASET decides the mapping
+        return {"Data_info": Data_info,}
+         
+    @classmethod
+    def build(cls, cfg: dict, **kwargs):
         """
         Build MainDataset_Cached from config.
         """
-
         # Extract dataset-specific pipeline configs
         base_pipeline_cfg = cfg.pop("base_pipeline", None)
         aug_pipeline_cfg  = cfg.pop("augmentation_pipeline", None)
@@ -31,12 +52,14 @@ class MainDataset_Cached(BaseDataset):
             if aug_pipeline_cfg is not None else None
         )
 
-        # Forward everything to constructor
+        # # Forward everything to constructor
+        # print(cfg)
+        # print(kwargs)
         return cls(
             base_pipeline=base_pipeline,
             augmentation_pipeline=augmentation_pipeline,
             **cfg,
-            **extra_kwargs,
+            **kwargs,
         )
 
     def __init__(
@@ -62,10 +85,10 @@ class MainDataset_Cached(BaseDataset):
             "none", "fully_cached"
         }
 
-        assert labels is not None or Data_info is not None
+        assert Data_info is not None
         assert base_images is not None or image_root is not None
-        assert extras is not None or not ((extra_feature_cols is not None) and (Data_info is None))
 
+        self.Data_info = Data_info
         self.base_images = [] if base_images is None else base_images
         self.labels = [] if labels is None else labels
         self.use_extra = extras is not None or extra_feature_cols is not None
@@ -81,10 +104,8 @@ class MainDataset_Cached(BaseDataset):
                 self.labels.append(torch.tensor(row[label_col] == 'True', dtype=torch.long))
 
                 if self.use_extra and extras is None:
-                    feats = torch.tensor(
-                        row[extra_feature_cols].values,
-                        dtype=torch.float32
-                    )
+                    vals = row[extra_feature_cols].astype(np.float32).values
+                    feats = torch.tensor(vals)
                     self.extras.append(feats)
 
         self.aug_mode = aug_mode

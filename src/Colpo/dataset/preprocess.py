@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+import joblib
+from pathlib import Path
 
 
 class Imputation:
@@ -17,6 +19,7 @@ class Imputation:
         """
         Learn statistics from the training dataset only.
         """
+        df = df.copy()
         # ---- Fit Age median ----
         self.age_median = df["Age"].median()
 
@@ -212,3 +215,63 @@ def prepare_dataframe(main_data: pd.DataFrame, hpv_data: pd.DataFrame, imputatio
     prepared_df = pd.concat([main_data[['Patient ID', 'jpg_file', 'Abnormality(Impression)', 'Abnormality(BX)']], extra_df], axis = 1)
     return prepared_df, imputation
     
+class PreprocessDataframe:
+    """
+    Stateful preprocessing pipeline.
+    """
+
+    def __init__(self, imputation: Imputation | None = None):
+        self.imputation = imputation or Imputation()
+        self._fitted = False
+
+    # --------------------------------------------------
+    # FIT
+    # --------------------------------------------------
+    def fit(self, main_df: pd.DataFrame, hpv_df: pd.DataFrame):
+        main_df = prepare_logul(main_df.copy())
+        extra_df = perpare_extra(main_df, hpv_df.copy())
+
+        self.imputation.fit(extra_df)
+        self._fitted = True
+        return self
+
+    # --------------------------------------------------
+    # TRANSFORM
+    # --------------------------------------------------
+    def transform(self, main_df: pd.DataFrame, hpv_df: pd.DataFrame):
+        if not self._fitted:
+            raise RuntimeError("Preprocess must be fitted before transform")
+
+        main_df = prepare_logul(main_df.copy())
+        extra_df = perpare_extra(main_df, hpv_df.copy())
+
+        extra_feats = self.imputation.transform(extra_df)
+
+        out = pd.concat(
+            [
+                main_df[['Patient ID', 'jpg_file',
+                         'Abnormality(Impression)', 'Abnormality(BX)']].reset_index(drop=True),
+                extra_feats.reset_index(drop=True)
+            ],
+            axis=1
+        )
+        return out
+
+    # --------------------------------------------------
+    # FIT + TRANSFORM
+    # --------------------------------------------------
+    def fit_transform(self, main_df, hpv_df):
+        self.fit(main_df, hpv_df)
+        return self.transform(main_df, hpv_df)
+
+    # --------------------------------------------------
+    # SAVE / LOAD
+    # --------------------------------------------------
+    def save(self, path: str | Path):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self, path)
+
+    @staticmethod
+    def load(path: str | Path) -> "PreprocessDataframe":
+        return joblib.load(path)

@@ -1,10 +1,18 @@
+data_root: D:\Data
+
 dataset:
-  name: main_cached
+  name: MainDataset_Cached
   
-  image_root: D:\Data\Cropped Folder
+  preprocess_inputs:
+    main_dataframe: ${data_root}/Meta/test_main_features_75.xlsx
+    hpv_dataframe:  ${data_root}/Meta/test_HPV_features_75.xlsx
+
+  image_root: ${data_root}\Cropped Folder
   aug_mode: fully_cached        # none | fully_cached
   label_col: Abnormality(Impression)
   
+  extra_feature_cols: ['Age']
+
   include_original: true          # include base-only image
   num_random_augs: 3              # only used for random_online / index_dependent
 
@@ -12,56 +20,47 @@ dataset:
   # Base pipeline (ALWAYS applied)
   # ----------------------------
   base_pipeline:
-    crop_to_square: {}
+    # crop_to_square: {}
 
-    resize:
-      w:
-        type: simple
-        args: 256
-      h:
-        type: simple
-        args: 256
+    - _target_: torchvision.transforms.Resize
+      args:
+        size:
+          type: simple
+          value: 224
 
-    to_tensor: {}
+    - _target_: torchvision.transforms.ToTensor
+      args: {}
 
-    normalize:
-      mean:
-        type: simple 
-        args: [0.485, 0.456, 0.406]
-      std:  
-        type: simple
-        args: [0.229, 0.224, 0.225]
+    # - _target_: torchvision.transforms.Normalize
+    #   args:
+    #     mean:
+    #       type: simple
+    #       value: [0.485, 0.456, 0.406]
+    #     std:
+    #       type: simple
+    #       value: [0.229, 0.224, 0.225]
 
-  # ----------------------------
-  # Augmentation pipeline
-  # ----------------------------
-  augmentations:
-    rotation:
-      angle:
-        type: random
-        args: [0, 15, 30, 60, 75, 90, 105, 120, 150, 175, 180]
+  
+  augmentation_pipeline:
 
-    random_h_flip:
-      prob:
-        type: explicit
-        args: [0, 1]
+    - _target_: torchvision.transforms.RandomRotation
+      args:
+        degrees:
+          type: random
+          value: 30   # you can replace with a tuple like [-30,30] if you want both directions
 
-    random_v_flip:
-      prob:
-        type: explicit
-        args: [0, 1]
+    - _target_: torchvision.transforms.RandomHorizontalFlip
+      args:
+        p:
+          type: explicit
+          value: [0.0, 1.0]
 
-    # color_jitter:
-    #   brightness:
-    #     type: random
-    #     args:
-    #       min: 0.8
-    #       max: 1.2
+    - _target_: torchvision.transforms.RandomVerticalFlip
+      args:
+        p:
+          type: explicit
+          value: [0.0, 1.0]
 
-    #   contrast:
-    #     type: explicit
-    #     args: [0.9, 1.1]
+    
 
-    #   hue:
-    #     type: explicit
-    #     args: [-0.05, 0.0, 0.05]
+

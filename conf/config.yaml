@@ -1,5 +1,9 @@
+
+data_root: D:\Data
+
 defaults:
+  - preprocess: default
   - dataset: default
-  - model: resnet
-  - training: default
+  - model: null
+  - training: null
   - _self_

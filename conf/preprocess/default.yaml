@@ -1,0 +1,18 @@
+preprocess:
+  name: PreprocessDataframe          # class name (resolved via import_target)
+  
+  # --------------------------------------------------
+  # Persistence
+  # --------------------------------------------------
+  save_path: .checkpoints/exp1/preprocess/preprocess.pkl
+  load_if_exists: true      # reuse fitted preprocess if found
+  load_path: null
+  do_fit: true
+  
+  fit_args:
+    main_dataframe: ${data_root}/Meta/train_main_features_75.xlsx
+    hpv_dataframe:  ${data_root}/Meta/train_HPV_features_75.xlsx
+  # --------------------------------------------------
+  # Imputation configuration
+  # --------------------------------------------------
+  imputation: null
