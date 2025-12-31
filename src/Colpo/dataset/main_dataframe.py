@@ -302,3 +302,30 @@ def add_labels(raw_df: DataFrame):
     raw_df['Abnormality(BX)'] = (~flag_bx_nan & ~flag_bx_normal) | (flag_bx_nan & ~flag_imp_normal)
 
     return raw_df
+
+def category_table(raw_data: DataFrame, cols: list|str|None = None):
+    if cols is None:
+        cols = raw_data.columns
+        cols = cols.drop(['Patient ID', 'jpg_file', 'xlsx_file', 'Date',  'EXTRA INFO', 'Age', 
+                          'Erossion:clock', 'Location of BX:BX1', 'Location of BX:BX2', 'SD', 
+                          '#Partner'])
+    elif isinstance(cols, str): cols = [cols]
+    
+    rows = []
+
+    
+    for col in cols:
+        counts = raw_data[col].value_counts(dropna=True)
+        for k, v in counts.items():
+            rows.append({
+                "column": col,
+                "category": "NaN" if pd.isna(k) else k,
+                "count": int(v)
+            })
+        rows.append({
+            "column": col,
+            "category": "NaN", 
+            "count": len(raw_data) - int(counts.sum())
+        })
+
+    return pd.DataFrame(rows)
